@@ -5,15 +5,17 @@ using UnityEngine;
 public class PlayerMovement : MonoBehaviour
 {
     private Rigidbody rigidBody;
-    public float speed = 5f;
+    private AudioSource audioSource;
+    public AudioClip lifting;
+    public AudioClip landing;
 
     private void Start()
     {
         rigidBody = GetComponent<Rigidbody>();
+        audioSource = GetComponent<AudioSource>();
     }
 
-    // Update is called once per frame
-    void Update()
+    private void Update()
     {
         Movement();
     }
@@ -23,7 +25,19 @@ public class PlayerMovement : MonoBehaviour
         if (Input.GetKey(KeyCode.Space))
         {
             rigidBody.AddRelativeForce(Vector3.up);
+            if (!audioSource.isPlaying)
+            {
+                audioSource.PlayOneShot(lifting, 1);
+            }
         }
+        else 
+        {
+            if (Input.GetKeyUp(KeyCode.Space))
+            {
+                audioSource.Stop();
+                audioSource.PlayOneShot(landing, 1);
+            }                
+        }   
 
         if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))
         {
