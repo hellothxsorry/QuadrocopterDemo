@@ -3,23 +3,34 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
+using UnityStandardAssets.CrossPlatformInput;
 
 public class PlayerControl : MonoBehaviour
 {
-    [SerializeField]    float rcsThrust = 100f;
-    [SerializeField]    float mainThrust = 50f;
+    [SerializeField] float rcsThrust = 100f;
+    [SerializeField] float mainThrust = 150f;
+    [SerializeField] float loadLevelDelay = 2f;
 
+    [SerializeField] ParticleSystem engineParticles;
+    [SerializeField] ParticleSystem collisionParticles;
+    [SerializeField] ParticleSystem deathParticles;
+    [SerializeField] ParticleSystem victoryParticles;
+    
     enum State { Alive, Dying, Transcending }
     State state = State.Alive;
+
     public AudioClip[] smashes;
-    public AudioClip lifting;
     public AudioClip landing;
+    public AudioClip nextLevel;
+    public float battery = 100f;
 
     private Rigidbody rigidBody;
     private AudioSource audioSource;
     private Animator droneAnimation;
     private AudioClip smash;
-    private bool alreadyLaunched = false;
 
     private void Start()
     {
@@ -36,7 +47,7 @@ public class PlayerControl : MonoBehaviour
         {
             Thrust();
             Rotate();
-        }        
+        }
     }
 
     private void OnCollisionEnter(Collision other)
@@ -61,68 +72,65 @@ public class PlayerControl : MonoBehaviour
                 break;
             case "Finish":
                 Debug.Log("Level is done");
-                state = State.Transcending; 
-                Invoke("LoadNextLevel", 1f);
+                state = State.Transcending;
+                audioSource.PlayOneShot(nextLevel, 5);
+                victoryParticles.Play();
+                Physics.gravity = new Vector3(0, -9.81f, 0);
+                Invoke("LoadNextLevel", loadLevelDelay);
                 break;
             default:
                 DeadState();
                 Vector3 direction = other.contacts[0].point - transform.position;
                 direction = -direction.normalized;
+                collisionParticles.Play();
                 GetComponent<Rigidbody>().AddForce(direction * knockBackForce);
                 break;
         }
     }
-       
+
     //Vertical movement control of drone (boosting to the up only, with a sound)
-    private void Thrust()
+    public void Thrust()
     {
-        if (Input.GetKey(KeyCode.Space) && state == State.Alive)
+        if (CrossPlatformInputManager.GetButton("Thrust"))
         {
-            if (alreadyLaunched == false)
-            {
-                droneAnimation.gameObject.GetComponent<Animator>().enabled = true;
-                alreadyLaunched = true;
-            }
-            else
-            {
-                rigidBody.AddRelativeForce(Vector3.up * mainThrust);
-                if (!audioSource.isPlaying)
-                {
-                    audioSource.PlayOneShot(lifting, 3);
-                }
-            }            
+            droneAnimation.gameObject.GetComponent<Animator>().enabled = true;
+            transform.GetChild(10).gameObject.SetActive(false);
+            transform.GetChild(11).gameObject.SetActive(true);
+            rigidBody.AddRelativeForce(Vector3.up * mainThrust);
+
+            engineParticles.Play();
         }        
     }
 
     //Horizontal incline controling of drone
-    private void Rotate()
+    public void Rotate()
     {
         rigidBody.freezeRotation = true;
-        
         float rotationThisFrame = rcsThrust * Time.deltaTime;
 
-        if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))
-        {            
+        if (CrossPlatformInputManager.GetButton("LeftRotate"))
+        {
             transform.Rotate(Vector3.left * rotationThisFrame);
         }
 
-        if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow))
+        if (CrossPlatformInputManager.GetButton("RightRotate"))
         {
             transform.Rotate(Vector3.right * rotationThisFrame);
-        }
+        }        
     }
 
     //Dead status after collision with obstacles: stops the engine sound and animation, plays the random smash sound and turns off the freezing of all positions and rotations
     private void DeadState()
     {
         state = State.Dying;
+        deathParticles.Play();
         audioSource.Stop();
         smash = smashes[UnityEngine.Random.Range(0, smashes.Length)];
         audioSource.PlayOneShot(smash, 0.5f);
-        StartCoroutine(deactivateDrone());
+        StartCoroutine(DeactivateDrone());
         rigidBody.constraints = RigidbodyConstraints.None;
         //rigidBody.constraints = RigidbodyConstraints.FreezePositionZ;
-        Invoke("RestartToFirstLevel", 1.5f);
+        Invoke("RestartToFirstLevel", loadLevelDelay);
     }
 
     //After achievement the goal of the current level, starts the loading of the next one consistently
@@ -139,11 +147,14 @@ public class PlayerControl : MonoBehaviour
     }
 
     //Numerator for delayed playing of death sound right after the collision knocking back (to avoid the synchronized playback of two those sounds at once)
-    IEnumerator deactivateDrone()
+    IEnumerator DeactivateDrone()
     {
-        Physics.gravity = new Vector3(0, -50, 0);
+        Physics.gravity = new Vector3(0, -20, 0);
+        transform.GetChild(11).gameObject.SetActive(false);
+        transform.GetChild(10).gameObject.SetActive(true);
         yield return new WaitForSeconds(0.2f);
         audioSource.PlayOneShot(landing, 3f);
         droneAnimation.gameObject.GetComponent<Animator>().enabled = false;
     }
 }
+
